@@ -1,11 +1,12 @@
-# BPSK-Test: Frequenzoffset sichtbar machen
+# BPSK-Test: Frequenzoffset und Zeitsynchronisation
 
 Einfacher Testaufbau, um den Frequenzoffset zwischen den Oszillatoren (PLLs) von I/Q-Modulator und
-I/Q-Demodulator zu messen und darzustellen.
+I/Q-Demodulator zu messen und darzustellen. Ein Barker-Code dient zur Zeitsynchronisation, eine
+Early-Late-Regelung führt den Abtastzeitpunkt nach (Symbol Timing Recovery).
 
 ```
-Sender:    Bits -> ±1 -> Rechteckimpulse -> I (links), Q = 0 (rechts) -> Soundkarte -> I/Q-Modulator
-Empfänger: I/Q-Demodulator -> Soundkarte (I links, Q rechts) -> Frequenzoffset messen und anzeigen
+Sender:    [Barker-13][Bits] -> ±1 -> Rechteckimpulse -> I (links), Q = 0 (rechts) -> Soundkarte -> I/Q-Modulator
+Empfänger: I/Q-Demodulator -> Soundkarte -> Frequenzoffset -> Barker-Synchronisation -> Abtasten mit Timing-Regelung
 ```
 
 ## Start
@@ -39,6 +40,23 @@ Der Empfänger braucht dafür weder Synchronisation noch die gesendeten Bits. Ei
 |Δf| < 12 kHz. Wird kein Burst erkannt, wertet er die ganze Aufnahme aus (z. B. nur das Trägerleck
 des Modulators).
 
+## Zeitsynchronisation mit Barker-Code
+
+Jeder Burst beginnt mit dem Barker-Code der Länge 13: `+1 +1 +1 +1 +1 −1 −1 +1 +1 −1 +1 −1 +1`.
+Seine Autokorrelation hat eine Spitze von 13 und Nebenwerte von höchstens 1. Dadurch ist der
+Beginn des ersten Symbols eindeutig.
+
+1. Der gemessene Phasenverlauf wird aus dem Empfangssignal herausgerechnet. Übrig bleibt ein reelles
+   ±1-Signal, allerdings nur bis auf ein Vorzeichen, weil die Phase aus r² nur bis auf 180° bestimmt ist.
+2. Korrelation mit dem Barker-Code (als Rechteckimpulse): Die Spitze liegt genau am Beginn der
+   Präambel. Ist sie negativ, wird das Signal invertiert; damit sind auch die Bits eindeutig.
+3. **Symbol Timing Recovery:** Ab diesem Zeitpunkt wird jedes Symbol über seine Dauer integriert
+   (Integrate & Dump). Zusätzlich wird ein Viertel Symbol früher und später integriert. Ist das Fenster
+   zu spät, ist die „späte“ Integration kleiner als die „frühe“ (sie reicht weiter ins nächste Symbol),
+   und das Fenster wird etwas nach vorne geschoben, und umgekehrt. So folgt der Empfänger einer
+   Taktabweichung zwischen Sender- und Empfänger-Soundkarte. Bei „Nur Einsen“ gibt es keine
+   Symbolwechsel, dann bleibt das Fenster stehen.
+
 ## Einstellungen
 
 **Sender**
@@ -57,26 +75,41 @@ des Modulators).
 | Feld | Bedeutung |
 |---|---|
 | Eingang | Soundkarte vom I/Q-Demodulator |
-| Symbolrate [Bd] | Wie am Sender; nur für die Konstellation nötig |
+| Symbolrate [Bd] | Wie am Sender |
 | Max. Aufnahmedauer [s] | Aufnahme endet spätestens danach |
+| Timing-Regelverstärkung | Wie schnell das Abtastfenster nachgeführt wird (Standard 0,05; 0 = keine Nachführung) |
 | WAV laden / speichern | Aufnahme speichern und später erneut auswerten |
+| Erneut auswerten | Gleiche Aufnahme mit geänderten Einstellungen |
+| Vergleich mit Sender | Bitfolge, Symbole pro Burst und eigene Bits wie am Sender, dann werden die Bitfehler gezählt |
+| Zeitsignal-Ausschnitt | Welche Symbole im Zeitsignal-Plot gezeigt werden (ab Symbol, Anzahl) |
 
 ## Anzeige im Empfänger
+
+**Reiter „Frequenzoffset“**
 
 | Grafik | Was man sieht |
 |---|---|
 | Spektrum | Empfangssignal und r²; die rote Linie liegt bei 2·Δf. |
 | Frequenzoffset über der Zeit | Ist der Offset konstant, driftet er oder springt er? |
 | Phase Empfang − Sender | Abgewickelte Phase in Umdrehungen; die Steigung ist der Offset. |
-| Symbole (I/Q) | Ohne Korrektur liegen die Punkte auf einem Kreis (Phase läuft um), mit Korrektur des gemessenen Offsets auf zwei Punkten. |
+| Symbole (I/Q) | Ohne Korrektur liegen die Punkte auf einem Kreis (Phase läuft um), mit Korrektur und Timing auf zwei Punkten. |
 
-Im Textfeld stehen Frequenzoffset, Drift und die Phasendrehung je Symbol.
+**Reiter „Zeitsynchronisation“**
+
+| Grafik | Was man sieht |
+|---|---|
+| Barker-13-Korrelation | Schmale Spitze am Beginn der Präambel; Güte nahe 1 = sauber erkannt. |
+| Timing-Nachführung | Wie weit das Abtastfenster gegenüber einem starren Raster verschoben wurde. Eine gleichmäßige Rampe bedeutet Taktabweichung zwischen den Soundkarten. |
+| Zeitsignal und Abtastzeitpunkte | Rohsignal I (grau), Signal nach Frequenzkorrektur (blau), Symbolgrenzen (senkrechte Linien), Barker-Präambel (orange), Abtastzeitpunkte mit Integrationsergebnis (rot) und entschiedene Bits (oben, B = Barker). |
+
+Im Textfeld stehen Frequenzoffset, Drift, Phasendrehung je Symbol, Barker-Erkennung, Timing-Nachführung,
+die ersten Bits und die Bitfehler.
 
 ## Dateien
 
 | Datei | Inhalt |
 |---|---|
-| `bpsk.py` | Senden, Offset-Messung, Simulation für Tests |
+| `bpsk.py` | Senden, Offset-Messung, Barker-Synchronisation, Timing Recovery, Simulation für Tests |
 | `sender.py` | Sender-GUI |
 | `receiver.py` | Empfänger-GUI (`py -3.9 receiver.py aufnahme.wav` wertet ohne GUI aus) |
 | `audio_io.py` | Soundkarte und WAV |

@@ -69,7 +69,8 @@ class SenderApp:
         cfg = self.config()
         tx = bpsk.modulate(cfg, bpsk.make_bits(cfg), silence_s=cfg.pause_s / 2 if loop else 0.2)
         self.plot(cfg, tx)
-        self.status.set("%d Symbole, %.2f s, %d Abtastwerte/Symbol" % (cfg.n_symbols, cfg.n_symbols / cfg.symbol_rate, cfg.sps))
+        self.status.set("13 Barker- + %d Datensymbole, %.2f s, %d Abtastwerte/Symbol"
+                        % (cfg.n_symbols, (cfg.n_symbols + 13) / cfg.symbol_rate, cfg.sps))
         return cfg, tx
 
     def send(self, loop):
@@ -98,7 +99,8 @@ class SenderApp:
         t = np.arange(n) / cfg.fs * 1000
         self.ax[0].plot(t, x[:n, 0], label="I")
         self.ax[0].plot(t, x[:n, 1], label="Q")
-        self.ax[0].set_title("Sendesignal (erste 20 Symbole)")
+        self.ax[0].axvspan(0, 13 * cfg.sps / cfg.fs * 1000, color="orange", alpha=0.15, label="Barker-13")
+        self.ax[0].set_title("Sendesignal (erste 20 Symbole: 13 Barker + Daten)")
         self.ax[0].set_xlabel("t [ms]")
         self.ax[0].legend()
         X = np.fft.fftshift(np.abs(np.fft.fft(x[:, 0] * np.hanning(len(x))))) + 1e-12
